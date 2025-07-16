@@ -2,98 +2,143 @@ package com.library.study.service;
 
 import com.library.study.model.StudyTable;
 import com.library.study.repository.StudyTableRepository;
+import org.springframework.beans.BeanWrapperImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-@Transactional
+import java.util.stream.Collectors;
+
 @Service
-public class StudyTableService {
+@Transactional
+public class StudyTableServiceImpl implements StudyTableService {
 
     @Autowired
-    private StudyTableRepository tableRepository;
+    private StudyTableRepository repo;
 
-    // 1. Get all tables
+    // 1. Get all study tables
+    @Override
     public List<StudyTable> getAllTables() {
-        return tableRepository.findAll();
+        return repo.findAll();
     }
 
-    // 2. Get table by ID
-    public Optional<StudyTable> getTableById(Long id) {
-        return tableRepository.findById(id);
-    }
-
-    // 3. Get tables by room number
+    // 2. Get tables by room number
+    @Override
     public List<StudyTable> getTablesByRoom(String roomNumber) {
-        return tableRepository.findByRoomNumber(roomNumber);
+        return repo.findByRoomNumber(roomNumber);
     }
 
-    // 4. Get only available tables
+    // 3. Get available tables
+    @Override
     public List<StudyTable> getAvailableTables() {
-        return tableRepository.findByIsAvailableTrue();
+        return repo.findByStatus("AVAILABLE");
     }
 
-    // 5. Save a new or updated table
+    // 4. Get table by ID
+    @Override
+    public Optional<StudyTable> getTableById(Long id) {
+        return repo.findById(id);
+    }
+
+    // 5. Save new table
+    @Override
     public StudyTable saveTable(StudyTable table) {
-        if (table.getIsAvailable() == null) {
-            table.setIsAvailable(true); // default availability if not set
-        }
-        return tableRepository.save(table);
+        if (table.getStatus() == null) table.setStatus("AVAILABLE");
+        return repo.save(table);
     }
 
-    // 6. Assign student to a table
+    // 6. Delete table
+    @Override
+    public void deleteTable(Long id) {
+        repo.deleteById(id);
+    }
+
+    // 7. Assign student to table
+    @Override
     public StudyTable assignStudent(Long id, String studentName) {
-        Optional<StudyTable> optionalTable = tableRepository.findById(id);
-        if (optionalTable.isPresent()) {
-            StudyTable table = optionalTable.get();
-    
-            // Prevent assigning if already occupied
-            if (!table.getIsAvailable()) {
-                System.out.println("Table " + id + " is already occupied.");
-                return null;
-            }
-    
+        return repo.findById(id).map(table -> {
             table.setAssignedStudent(studentName);
-            table.setIsAvailable(false);  // Mark as unavailable
-            table.setOccupied(true);      // Mark as occupied ✅
-    
-            return tableRepository.save(table);
-        }
-        return null;
+            table.setStatus("OCCUPIED");
+            return table;
+        }).orElse(null);
     }
-    
- // 7. Free a table
-public boolean freeTable(Long id) {
-    Optional<StudyTable> optionalTable = tableRepository.findById(id);
-    if (optionalTable.isPresent()) {
-        StudyTable table = optionalTable.get();
-        table.setAssignedStudent(null);
-        table.setIsAvailable(true); // mark table as available again
-        tableRepository.save(table);
-        return true;
+
+    // 8. Free a table
+    @Override
+    public boolean freeTable(Long id) {
+        return repo.findById(id).map(table -> {
+            table.setAssignedStudent(null);
+            table.setStatus("AVAILABLE");
+            return true;
+        }).orElse(false);
     }
-    return false;
-}
 
-// 8. Delete a table
-public void deleteTable(Long id) {
-    tableRepository.deleteById(id);
-}
-
-
-    // 9. Summary: total, available, occupied
+    // 9. Summary
+    @Override
     public Map<String, Long> getSummary() {
-        List<StudyTable> all = tableRepository.findAll();
-        long total = all.size();
-        long available = all.stream().filter(StudyTable::getIsAvailable).count();
+        long total = repo.count();
+        long available = repo.countByStatus("AVAILABLE");
         long occupied = total - available;
-
-        Map<String, Long> summary = new HashMap<>();
-        summary.put("total", total);
-        summary.put("available", available);
-        summary.put("occupied", occupied);
-
+        Map<String, Long> summary = new LinkedHashMap<>();
+        summary.put("TOTAL", total);
+        summary.put("AVAILABLE", available);
+        summary.put("OCCUPIED", occupied);
         return summary;
+    }
+
+    // 10. Update a table
+    @Override
+    public StudyTable updateTable(Long id, StudyTable incoming) {
+        return repo.findById(id).map(existing -> {
+            copyNonNullProperties(incoming, existing);
+            return existing;
+        }).orElse(null);
+    }
+
+    // 11. Bulk insert tables
+    @Override
+    public List<StudyTable> saveTables(List<StudyTable> tables) {
+        tables.forEach(t -> {
+            if (t.getStatus() == null) t.setStatus("AVAILABLE");
+        });
+        return repo.saveAll(tables);
+    }
+
+    // 12. Bulk free tables
+    @Override
+    public int freeTables(List<Long> ids) {
+        List<StudyTable> tables = repo.findAllById(ids);
+        tables.forEach(t -> {
+            t.setAssignedStudent(null);
+            t.setStatus("AVAILABLE");
+        });
+        return tables.size();
+    }
+
+    // 13. Get tables by status
+    @Override
+    public List<StudyTable> getTablesByStatus(String status) {
+        return repo.findByStatus(status.toUpperCase());
+    }
+
+    // 14. Get tables by student name
+    @Override
+    public List<StudyTable> getTablesByStudent(String studentName) {
+        return repo.findByAssignedStudent(studentName);
+    }
+
+    // Utility to ignore null properties during copy
+    private void copyNonNullProperties(Object src, Object target) {
+        BeanWrapperImpl srcWrapper = new BeanWrapperImpl(src);
+        BeanWrapperImpl trgWrapper = new BeanWrapperImpl(target);
+
+        for (var pd : srcWrapper.getPropertyDescriptors()) {
+            String propName = pd.getName();
+            Object value = srcWrapper.getPropertyValue(propName);
+            if (value != null && trgWrapper.isWritableProperty(propName)) {
+                trgWrapper.setPropertyValue(propName, value);
+            }
+        }
     }
 }
