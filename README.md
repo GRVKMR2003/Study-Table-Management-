@@ -32,7 +32,7 @@ A web-based application for managing study tables in a library. Admins can assig
 
 | Layer         | Technology                |
 |---------------|---------------------------|
-| Frontend      | HTML, CSS, Vanilla JS     |
+| Frontend      | HTML, CSS,      |
 | Backend       | Spring Boot (Java)        |
 | Database      | MySQL                     |
 | ORM Framework | Spring Data JPA + Hibernate |
@@ -152,11 +152,10 @@ VALUES
 
 ## 💡 Future Improvements
 
-* Role-based admin login
 * Student registration & login
 * Table usage analytics (daily/weekly)
 * Room occupancy heatmap view
-* Dark mode toggle
+
 
 ---
 
